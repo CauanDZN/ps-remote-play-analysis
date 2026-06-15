@@ -1,0 +1,23 @@
+# Cache de bytecode do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Caches de ferramentas
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Relatório gerado pelo script (contém dados de rede do PC onde foi executado)
+remoteplay_diagnostico.txt
+
+# Arquivos de SO/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
