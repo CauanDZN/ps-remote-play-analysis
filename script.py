@@ -281,12 +281,50 @@ elif rp_ok == "n":
     elif rp_detail == "b":
         rp_status_text = (
             "FALHA - o PS5 nunca apareceu na lista de consoles "
-            "(problema na fase de descoberta/broadcast local)."
+            "(problema na fase de descoberta)."
         )
     else:
         rp_status_text = "FALHA - o usuário confirmou que o PS Remote Play NÃO conectou nesta tentativa."
 else:
     rp_status_text = "Não informado pelo usuário."
+
+ps5_location = ask(
+    "\nO PS5 está na MESMA rede deste PC agora, ou em OUTRA rede - ex: PS5 em\n"
+    "casa e você tentando Remote Play do trabalho/pela internet?\n"
+    "  a) Mesma rede local do PS5\n"
+    "  b) PS5 em outra rede / Remote Play pela internet\n"
+    "Resposta (a/b/Enter=não sei): "
+)
+if ps5_location == "a":
+    ps5_location_text = "Mesma rede local do PS5."
+elif ps5_location == "b":
+    ps5_location_text = "PS5 em outra rede (Remote Play pela internet)."
+else:
+    ps5_location_text = "Não informado."
+
+version_patch_applied = ask(
+    "\nEste PC já teve o PS Remote Play com downgrade para a versão\n"
+    "8.5.0.08070 + patch (remoteplay-version-patcher) aplicado?\n"
+    "(s/n/Enter=não sei): "
+)
+version_patch_worked = ""
+if version_patch_applied == "s":
+    version_patch_worked = ask(
+        "Esse patch resolveu/evitou problemas de conexão nesta máquina?\n"
+        "(s/n/Enter=ainda não sei): "
+    )
+
+if version_patch_applied == "s":
+    if version_patch_worked == "s":
+        patch_status_text = "SIM - aplicado, e CONFIRMADO que ajudou nesta máquina."
+    elif version_patch_worked == "n":
+        patch_status_text = "SIM - aplicado, mas NÃO resolveu nesta máquina."
+    else:
+        patch_status_text = "SIM - aplicado, resultado ainda não confirmado."
+elif version_patch_applied == "n":
+    patch_status_text = "Não aplicado."
+else:
+    patch_status_text = "Não informado."
 
 print()
 
@@ -302,7 +340,9 @@ add(
         "falhas de conexão do PS Remote Play.\n\n"
         f"Sistema operacional : {platform.system()} ({platform.platform()})\n"
         f"Executando elevado  : {is_admin()}\n"
-        f"PS Remote Play agora: {rp_status_text}\n\n"
+        f"PS Remote Play agora: {rp_status_text}\n"
+        f"Localização do PS5  : {ps5_location_text}\n"
+        f"Patch versão 8.5.0  : {patch_status_text}\n\n"
         "Cada seção abaixo tem um bloco '--- Como interpretar / o que fazer ---'\n"
         "explicando o que o resultado significa e como corrigir problemas comuns.\n\n"
         "No Linux, se algum comando faltar, instale os pacotes básicos:\n"
@@ -522,6 +562,11 @@ add(
         "confiar só na rota padrão do Windows. Resultado: mesmo a tabela de\n"
         "rotas parecendo normal, o Remote Play pode tentar sair por um desses\n"
         "adaptadores e falhar (não encontra o PS5, ou conecta e cai).\n\n"
+        "OBS.: isso afeta principalmente quando o PS5 está na MESMA rede\n"
+        "(descoberta local). Se o PS5 está em OUTRA rede (Remote Play pela\n"
+        "internet), este tipo de adaptador tende a impactar mais o STREAMING\n"
+        "(depois que o PS5 já foi encontrado) - veja também a seção 'PS Remote\n"
+        "Play pela Internet' mais abaixo.\n\n"
         + (
             "Adaptador(es) ATIVO(S) agora: " + ", ".join(vpn_active_adapters) + "\n"
             "-> Estes são os principais suspeitos. Teste o procedimento abaixo.\n\n"
@@ -564,6 +609,57 @@ add(
         "  Set-NetIPInterface -InterfaceAlias \"<nome da VPN>\" -InterfaceMetric 9999\n\n"
         "Linux: aumente a métrica da rota da VPN:\n"
         "  sudo ip route change default via <gw_vpn> dev <iface_vpn> metric 9999"
+    )
+)
+
+step("Verificando cenário de Remote Play pela internet...")
+add(
+    "PS Remote Play pela Internet (PS5 em outra rede)",
+    (
+        "Quando o PS5 está em OUTRA rede (ex: PS5 em casa, este PC no\n"
+        "trabalho), a 'lista de consoles' do app NÃO depende de broadcast/\n"
+        "multicast local - o app consulta os servidores da PSN para saber se\n"
+        "o PS5 está disponível (ligado ou em repouso com Remote Play ativo).\n"
+        "Por isso, causas de rede local (VPN ativa, isolamento de Wi-Fi, VLAN)\n"
+        "tendem a ter MENOS impacto na descoberta neste cenário - o problema\n"
+        "tende a estar na configuração do PS5, na conta PSN, ou no app.\n\n"
+        f"Cenário informado pelo usuário : {ps5_location_text}\n"
+        f"Patch de versão 8.5.0.08070    : {patch_status_text}\n"
+    ),
+    note=(
+        "CHECKLIST (verificar NO PRÓPRIO PS5, em casa):\n"
+        "  Configurações > Sistema > Remote Play\n"
+        "    - 'Ativar Remote Play'                  : Ligado\n"
+        "    - 'Ativar PS5 a partir da Rede/Internet' : Ligado\n"
+        "  O PS5 precisa estar Ligado ou em Modo de Repouso com essas opções\n"
+        "  ativas, e a MESMA conta PSN logada no PS5 e no PC/app.\n\n"
+        "*** CANDIDATO A SOLUÇÃO: DOWNGRADE + PATCH DE VERSÃO ***\n"
+        "Em algumas versões, o PS Remote Play (PC) força atualização e, depois\n"
+        "disso, alguns usuários relatam que o app para de encontrar o PS5 pela\n"
+        "internet (relatos da comunidade sobre a versão 4508250). Workaround:\n"
+        "  1. Desinstale a versão atual do PS Remote Play.\n"
+        "  2. Instale a versão 8.5.0.08070 (procure o instalador arquivado\n"
+        "     dessa versão em fonte confiável).\n"
+        "  3. Baixe o 'remoteplay-version-patcher'\n"
+        "     (xeropresence/remoteplay-version-patcher no GitHub).\n"
+        "  4. Rode o patcher como Administrador - ele localiza o\n"
+        "     RemotePlay.exe automaticamente (ou coloque-o na mesma pasta).\n"
+        "  5. Abra o PS Remote Play normalmente e tente conectar.\n"
+        "Esse procedimento já foi testado em outra máquina como candidato a\n"
+        "solução para 'PS5 nunca aparece pela internet'. Avalie o resultado\n"
+        "nesta máquina respondendo a pergunta sobre o patch na próxima\n"
+        "execução do script.\n\n"
+        "ALTERNATIVA PARA ISOLAR O PROBLEMA: chiaki-ng\n"
+        "  chiaki-ng é um cliente OPEN SOURCE de Remote Play (repositório\n"
+        "  'streetpea/chiaki-ng' no GitHub) que se conecta diretamente ao PS5\n"
+        "  via IP + credenciais/registro da conta, sem depender da lista de\n"
+        "  dispositivos do app oficial. Se o chiaki-ng conectar e o app\n"
+        "  oficial não, o problema é do app/conta na Sony - não da sua rede.\n\n"
+        "DESCOBRIR O IP DO PS5 (faça em casa, na mesma rede do PS5):\n"
+        "  No PS5: Configurações > Rede > Ver Status da Conexão -> mostra o\n"
+        "  endereço IP (IPv4) e o endereço MAC.\n"
+        "  Ou acesse a página de administração do roteador de casa e veja a\n"
+        "  lista de dispositivos conectados (DHCP)."
     )
 )
 
@@ -732,21 +828,60 @@ https_play = http_status("https://www.playstation.com")
 tcp443_ok = port_results.get(443, (False, ""))[0]
 https_play_ok = https_play.startswith("200")
 https_ssl_error = "[ERRO SSL]" in https_play
+remote_scenario = (ps5_location == "b")
 
 LABEL_WIDTH = 40
 linhas = []
 linhas.append(f"{'PS Remote Play (informado pelo usuário)'.ljust(LABEL_WIDTH)} : {rp_status_text}")
+linhas.append(f"{'PS5 na mesma rede deste PC?'.ljust(LABEL_WIDTH)} : {ps5_location_text}")
 linhas.append(f"{'HTTPS www.playstation.com'.ljust(LABEL_WIDTH)} : {https_play}")
 linhas.append(f"{f'TCP 443 ({PS_HOST})'.ljust(LABEL_WIDTH)} : {'OK' if tcp443_ok else 'FALHOU'}")
 linhas.append(
     f"{'Adaptadores de VPN/túnel ativos'.ljust(LABEL_WIDTH)} : "
     + (", ".join(vpn_active_adapters) if vpn_active_adapters else "nenhum detectado")
 )
+linhas.append(f"{'Patch de versão 8.5.0.08070'.ljust(LABEL_WIDTH)} : {patch_status_text}")
 linhas.append("")
 
-# 1) Suspeito principal: adaptador de VPN/túnel ativo (causa já confirmada
-#    em casos reais com ZeroTier/Radmin VPN/Tailscale).
-if vpn_active_adapters:
+# 1) Suspeito principal depende do cenário: PS5 na mesma rede (VPN local) ou
+#    PS5 em outra rede / pela internet (config. do PS5, app, conta PSN).
+if remote_scenario:
+    linhas.append("=> CENÁRIO: PS5 em OUTRA rede (Remote Play pela internet).")
+    linhas.append("   A 'lista de consoles' depende dos servidores da PSN, não de")
+    linhas.append("   broadcast/multicast local - adaptadores de VPN tendem a afetar")
+    linhas.append("   mais o STREAMING (depois de encontrar o PS5) do que a descoberta.")
+    linhas.append("")
+    if rp_ok == "n" and rp_detail == "b":
+        linhas.append("Observação: o PS5 nunca apareceu na lista. Causas mais prováveis")
+        linhas.append("neste cenário, em ordem:")
+        linhas.append("")
+        linhas.append("1) Configuração do PS5 (verificar EM CASA, no próprio console):")
+        linhas.append("   Configurações > Sistema > Remote Play - 'Ativar Remote Play' e")
+        linhas.append("   'Ativar PS5 a partir da Rede' devem estar Ligados, PS5 ligado")
+        linhas.append("   ou em repouso, mesma conta PSN nos dois lados.")
+        linhas.append("")
+        if version_patch_applied == "s" and version_patch_worked == "s":
+            linhas.append("2) *** CANDIDATO JÁ CONFIRMADO EM OUTRA MÁQUINA ***: o downgrade")
+            linhas.append("   para 8.5.0.08070 + remoteplay-version-patcher resolveu lá.")
+            linhas.append("   Aplique o mesmo procedimento aqui (seção 'PS Remote Play pela")
+            linhas.append("   Internet' acima).")
+        else:
+            linhas.append("2) Bug de 'dispositivo não encontrado' após atualização forçada")
+            linhas.append("   pela Sony: aplicar o downgrade para 8.5.0.08070 +")
+            linhas.append("   remoteplay-version-patcher (candidato testado em outra")
+            linhas.append("   máquina - seção 'PS Remote Play pela Internet' acima).")
+        linhas.append("")
+        linhas.append("3) Para isolar app/conta vs. rede, teste o chiaki-ng conectando")
+        linhas.append("   direto via IP/credenciais do PS5 (seção 'PS Remote Play pela")
+        linhas.append("   Internet' acima).")
+        linhas.append("")
+    elif rp_ok == "n" and rp_detail == "a":
+        linhas.append("O PS5 apareceu na lista (comunicação com a PSN OK), mas a conexão")
+        linhas.append("falhou depois - o problema está no STREAMING (UDP). Veja")
+        linhas.append("'Endpoints UDP Ativos' e considere pedir liberação de UDP para os")
+        linhas.append("domínios/IPs da Sony, ou testar em outra rede (4G/hotspot).")
+        linhas.append("")
+elif vpn_active_adapters:
     linhas.append("=> SUSPEITO PRINCIPAL: adaptador(es) de VPN/túnel ativo(s)")
     linhas.append(f"   ({', '.join(vpn_active_adapters)}).")
     linhas.append("   Esse é o tipo de problema JÁ CONFIRMADO em casos reais (ZeroTier")
@@ -756,7 +891,7 @@ if vpn_active_adapters:
     linhas.append("   cada adaptador (um por vez) antes de abrir o Remote Play.")
     linhas.append("")
 
-# 2) Indícios de inspeção SSL.
+# 2) Indícios de inspeção SSL / conectividade básica.
 if https_ssl_error:
     linhas.append("=> Detectado erro de certificado SSL ao acessar a Sony.")
     linhas.append("   Isso indica INSPEÇÃO SSL CORPORATIVA (proxy MITM trocando")
@@ -765,7 +900,7 @@ if https_ssl_error:
     linhas.append("   Solução: solicitar ao TI uma exceção de inspeção SSL")
     linhas.append("   (bypass) para os domínios *.playstation.net / *.sony.com.")
     linhas.append("")
-elif https_play_ok and tcp443_ok:
+elif https_play_ok and tcp443_ok and not remote_scenario:
     linhas.append("HTTPS básico funcionando normalmente - não é bloqueio total")
     linhas.append("à PlayStation/Sony. Se o suspeito principal acima não resolver,")
     linhas.append("considere também:")
@@ -783,29 +918,29 @@ elif https_play_ok and tcp443_ok:
     linhas.append("     exceção para a categoria 'Gaming' ou para os domínios/IPs")
     linhas.append("     do PS Remote Play.")
     linhas.append("")
-else:
+elif not https_play_ok or not tcp443_ok:
     linhas.append("Já há indícios de bloqueio mesmo para HTTPS básico.")
     linhas.append("Revise as seções 'DNS', 'Proxy' e 'Firewall Local' acima - o")
     linhas.append("problema pode não ser específico do Remote Play, e sim de toda")
     linhas.append("a conectividade à internet nesta rede.")
     linhas.append("")
 
-# 3) Cruza com o que o usuário observou no app.
-if rp_ok == "n" and rp_detail == "b":
-    linhas.append("Observação: o PS5 NUNCA apareceu na lista de consoles. A descoberta")
-    linhas.append("usa broadcast/multicast UDP na rede LOCAL - é fortemente afetada por")
-    linhas.append("adaptadores de VPN ativos (reforça o suspeito principal acima),")
-    linhas.append("estar em VLAN diferente da do PS5, ou isolamento de cliente no Wi-Fi.")
-elif rp_ok == "n" and rp_detail == "a":
-    linhas.append("Observação: o PS5 apareceu na lista, mas a conexão falhou depois -")
-    linhas.append("a descoberta local funcionou; o problema está na fase de streaming")
-    linhas.append("(dados), mais associada a bloqueio de firewall/UDP corporativo do")
-    linhas.append("que a roteamento local.")
-elif rp_ok == "s":
+# 3) Cruza com o que o usuário observou no app (cenário "mesma rede" e sucesso).
+if rp_ok == "s":
     linhas.append("=> CONCLUSÃO: nesta rede o PS Remote Play está FUNCIONANDO e nenhum")
     linhas.append("   bloqueio crítico foi detectado. Guarde este relatório como")
     linhas.append("   REFERÊNCIA/CONTROLE para comparar com redes onde o Remote Play")
     linhas.append("   falha (ex: anexe-o ao chamado de TI da rede corporativa).")
+elif not remote_scenario and rp_ok == "n" and rp_detail == "b":
+    linhas.append("Observação: o PS5 NUNCA apareceu na lista de consoles. A descoberta")
+    linhas.append("usa broadcast/multicast UDP na rede LOCAL - é fortemente afetada por")
+    linhas.append("adaptadores de VPN ativos (reforça o suspeito principal acima),")
+    linhas.append("estar em VLAN diferente da do PS5, ou isolamento de cliente no Wi-Fi.")
+elif not remote_scenario and rp_ok == "n" and rp_detail == "a":
+    linhas.append("Observação: o PS5 apareceu na lista, mas a conexão falhou depois -")
+    linhas.append("a descoberta local funcionou; o problema está na fase de streaming")
+    linhas.append("(dados), mais associada a bloqueio de firewall/UDP corporativo do")
+    linhas.append("que a roteamento local.")
 
 add("Diagnóstico Automático (resumo)", "\n".join(linhas))
 
@@ -815,8 +950,22 @@ add("Diagnóstico Automático (resumo)", "\n".join(linhas))
 # ---------------------------------------------------------------------------
 
 OUTPUT_FILE = "remoteplay_diagnostico.txt"
-with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+
+# No Windows, grava com BOM UTF-8 ("utf-8-sig"). Sem o BOM, o "Get-Content"/
+# "cat" do Windows PowerShell 5.1 não detecta UTF-8 e exibe os acentos
+# trocados (ex: "ConfiguraÃ§Ã£o" em vez de "Configuração") - o arquivo em si
+# fica correto, mas a exibição no terminal sai errada. Com o BOM, o
+# PowerShell, o Notepad e o Excel detectam UTF-8 automaticamente.
+OUTPUT_ENCODING = "utf-8-sig" if IS_WINDOWS else "utf-8"
+with open(OUTPUT_FILE, "w", encoding=OUTPUT_ENCODING) as f:
     f.write("\n".join(REPORT))
 
 print("\nRelatório salvo em:")
 print(os.path.abspath(OUTPUT_FILE))
+if IS_WINDOWS:
+    print(
+        "\nDica: para ver o relatório no terminal sem acentos quebrados, abra-o\n"
+        "com 'notepad remoteplay_diagnostico.txt' ou no VS Code. Se usar 'cat'/\n"
+        "'type' no PowerShell e ainda aparecer 'Ã§Ã£o' no lugar de 'ção', rode:\n"
+        "  Get-Content .\\remoteplay_diagnostico.txt -Encoding utf8"
+    )
