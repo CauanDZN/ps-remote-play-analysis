@@ -20,9 +20,13 @@ Linux   : python3 script.py
 
 Saída
 -----
-Gera o arquivo 'remoteplay_diagnostico.txt' na mesma pasta do script,
-em UTF-8, com cada seção e uma nota explicando como interpretar o
-resultado / o que fazer se der erro.
+Gera na mesma pasta do script:
+  - remoteplay_diagnostico.txt  (texto, UTF-8 com BOM no Windows)
+  - remoteplay_diagnostico.html (HTML com formatação e emojis)
+  - remoteplay_diagnostico.pdf  (PDF, se 'pip install fpdf2' instalado)
+
+Cada seção inclui uma nota explicando como interpretar o resultado
+e o que fazer em caso de erro.
 """
 
 import os
@@ -34,6 +38,12 @@ import sys
 import urllib.error
 import urllib.request
 from datetime import datetime
+
+try:
+    from fpdf import FPDF
+    HAS_FPDF = True
+except ImportError:
+    HAS_FPDF = False
 
 IS_WINDOWS = platform.system() == "Windows"
 
@@ -50,6 +60,43 @@ if IS_WINDOWS:
 REPORT = []
 PS_HOST = "remoteplay.dl.playstation.net"  # mesmo host já usado no script original
 
+# Mapeia palavras-chave para emojis nos passos do console
+STEP_EMOJI = [
+    ("proxy do navegador", "🌍"),
+    ("configuração de rede", "📡"),
+    ("adaptadores de rede", "🔌"),
+    ("tabela de rotas", "🗺️"),
+    ("remote play pela internet", "🌍"),
+    ("endpoints udp", "📡"),
+    ("conexões ativas", "🔗"),
+    ("portas tcp", "🔌"),
+    ("portas", "🔌"),
+    ("playstation.com", "🌐"),
+    ("domínio corporativo", "🏢"),
+    ("processo do ps remote play", "🎮"),
+    ("prioridade", "📊"),
+    ("segurança / edr", "🔐"),
+    ("traceroute", "🗺️"),
+    ("diagnóstico automático", "🤖"),
+    ("relatório", "📝"),
+    ("sistema", "🖥️"),
+    ("ip público", "🌐"),
+    ("proxy", "🔒"),
+    ("dns", "📖"),
+    ("firewall", "🛡️"),
+    ("vpn", "🚇"),
+    ("cdn", "☁️"),
+    ("ping", "📶"),
+]
+
+# Cores ANSI para o terminal (Windows 10+ / Linux)
+class C:
+    G = "\033[92m"
+    Y = "\033[93m"
+    R = "\033[91m"
+    C = "\033[96m"
+    B = "\033[1m"
+    N = "\033[0m"
 
 # ---------------------------------------------------------------------------
 # Funções auxiliares
@@ -87,8 +134,12 @@ def _decode_console_output(data: bytes) -> str:
 
 
 def step(msg):
-    """Mostra progresso no console enquanto o script roda."""
-    print(f"[*] {msg}")
+    prefix = "[*]"
+    for keyword, emoji in STEP_EMOJI:
+        if keyword in msg.lower():
+            prefix = emoji
+            break
+    print(f" {prefix} {msg}")
 
 
 def run(win_cmd, linux_cmd=None, timeout=30):
@@ -946,26 +997,266 @@ add("Diagnóstico Automático (resumo)", "\n".join(linhas))
 
 
 # ---------------------------------------------------------------------------
-# Salvar relatório
+# Veredito no terminal e geração de relatórios HTML/PDF
 # ---------------------------------------------------------------------------
 
-OUTPUT_FILE = "remoteplay_diagnostico.txt"
+def _terminal_verdict(has_issues, rp_ok, remote_scenario):
+    """Exibe um resumo visual no terminal com emojis e cores."""
+    print()
+    print(f" {C.B}{C.C}{'='*70}{C.N}")
+    print(f" {C.B}{C.C}   🎮  DIAGNÓSTICO PS REMOTE PLAY — RELATÓRIO COMPLETO  🎮{C.N}")
+    print(f" {C.B}{C.C}{'='*70}{C.N}")
+    print()
 
-# No Windows, grava com BOM UTF-8 ("utf-8-sig"). Sem o BOM, o "Get-Content"/
-# "cat" do Windows PowerShell 5.1 não detecta UTF-8 e exibe os acentos
-# trocados (ex: "ConfiguraÃ§Ã£o" em vez de "Configuração") - o arquivo em si
-# fica correto, mas a exibição no terminal sai errada. Com o BOM, o
-# PowerShell, o Notepad e o Excel detectam UTF-8 automaticamente.
+    if rp_ok == "s":
+        print(f" {C.G}✅  PS Remote Play: CONECTOU com sucesso nesta tentativa{C.N}")
+    elif rp_ok == "n":
+        print(f" {C.R}❌  PS Remote Play: FALHOU nesta tentativa{C.N}")
+    else:
+        print(f" {C.Y}❓  PS Remote Play: não informado{C.N}")
+    print()
+
+    if has_issues:
+        print(f" {C.B}{C.Y}⚠️  PROBLEMAS DETECTADOS:{C.N}")
+        print(f" {C.Y}{'─'*60}{C.N}")
+        if vpn_active_adapters:
+            print(f"   🚇 VPN ativa: {', '.join(vpn_active_adapters)}")
+            print(f"   💡 Desabilite o adaptador e teste novamente")
+        if https_ssl_error:
+            print(f"   🔒 Erro SSL: possível proxy de inspeção corporativo")
+            print(f"   💡 Solicite ao TI exceção para *.playstation.net")
+        if not https_play.startswith("200"):
+            print(f"   🌐 HTTPS PlayStation: {https_play}")
+            print(f"   💡 Verifique DNS, proxy e firewall")
+        if not tcp443_ok:
+            print(f"   🔌 TCP 443 (CDN Sony): FALHOU")
+            print(f"   💡 Firewall pode estar bloqueando a porta 443")
+        print()
+        print(f" {C.B}{C.C}📖  Consulte o relatório completo para mais detalhes.{C.N}")
+    else:
+        print(f" {C.G}✅  NENHUM BLOQUEIO CRÍTICO DETECTADO!{C.N}")
+        if rp_ok == "s":
+            print(f" {C.G}🎉  TUDO FUNCIONANDO! O PS Remote Play está operacional.{C.N}")
+        else:
+            print(f" {C.Y}💡  Pode ser problema do app/conta/configuração do PS5.{C.N}")
+    print(f" {C.B}{C.C}{'─'*70}{C.N}")
+    print()
+
+
+def _generate_html():
+    """Gera relatório HTML com emojis e formatação."""
+    import html as h
+    buf = []
+    buf.append('''<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagnóstico PS Remote Play</title>
+<style>
+body{font-family:Segoe UI,Arial,sans-serif;background:#0f0f23;color:#e0e0e0;padding:20px;max-width:960px;margin:0 auto}
+h1{color:#00d4ff;text-align:center;font-size:26px;padding:10px 0}
+h2{color:#00d4ff;border-bottom:2px solid #00d4ff;padding-bottom:6px;margin:30px 0 12px}
+.s{background:#1a1a3e;border-radius:8px;padding:12px 18px;margin:12px 0;overflow-x:auto}
+pre{background:#0a0a1e;padding:8px 12px;border-radius:4px;font-size:13px;white-space:pre-wrap;word-wrap:break-word;line-height:1.35;margin:4px 0}
+.n{background:#1e1e3e;border-left:4px solid #e94560;padding:10px 14px;margin:8px 0;border-radius:0 5px 5px 0;font-size:14px}
+.v{padding:18px;border-radius:10px;margin:16px 0;font-size:17px;text-align:center}
+.v0{background:#0a2e1a;border:2px solid #0f0}
+.v1{background:#2e0a0a;border:2px solid #f44}
+.v2{background:#2e2a0a;border:2px solid #fd0}
+.f{text-align:center;color:#666;font-size:12px;padding:20px}
+@media print{body{background:#fff;color:#333}.s{background:#f5f5f5}h2{color:#0f3460}.v0{background:#e8f5e9;border-color:#080}.v1{background:#ffebee;border-color:#c00}.v2{background:#fff8e1;border-color:#a80}.n{background:#fce4ec}pre{background:#eee}}
+</style>
+</head>
+<body>
+''')
+    buf.append(f'<h1>🎮 Diagnóstico PS Remote Play<br><span style="font-size:14px;color:#888;display:block;font-weight:normal">Relatório gerado em {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}</span></h1>')
+
+    if has_issues:
+        buf.append('<div class="v v1">❌ <strong>Problemas Detectados</strong> — veja as seções abaixo para detalhes e soluções.</div>')
+    elif rp_ok == "s":
+        buf.append('<div class="v v0">✅ <strong>100% FUNCIONANDO!</strong> 🎉 O PS Remote Play está operacional nesta rede.</div>')
+    else:
+        buf.append('<div class="v v2">⚠️ <strong>Nenhum bloqueio crítico detectado</strong> — verifique configuração do PS5/app.</div>')
+
+    in_section = False
+    in_note = False
+    prev_was_sep = False
+
+    for line in REPORT:
+        stripped = line.strip()
+        if stripped.startswith("=" * 10):
+            prev_was_sep = True
+            continue
+
+        if stripped == "":
+            if in_note:
+                buf.append('</div>')
+                in_note = False
+            prev_was_sep = False
+            continue
+
+        if prev_was_sep:
+            if in_section:
+                buf.append('</div>')
+            in_section = True
+            in_note = False
+            buf.append(f'<h2>{h.escape(stripped)}</h2>')
+            buf.append('<div class="s">')
+            prev_was_sep = False
+            continue
+        prev_was_sep = False
+
+        if stripped.startswith("--- Como interpretar"):
+            if in_note:
+                buf.append('</div>')
+            if in_section:
+                buf.append('</div>')
+                in_section = False
+            buf.append('<div class="n"><strong>📖 Como interpretar / o que fazer</strong><br>')
+            in_note = True
+            continue
+
+        if in_note:
+            buf.append(f'<pre>{h.escape(line)}</pre>')
+            continue
+
+        buf.append(f'<pre>{h.escape(line)}</pre>')
+
+    if in_section:
+        buf.append('</div>')
+    if in_note:
+        buf.append('</div>')
+
+    buf.append('<hr><div class="f">Gerado pelo PS Remote Play — Diagnóstico de Rede</div>')
+    buf.append('</body></html>')
+    return '\n'.join(buf)
+
+
+def _generate_pdf():
+    """Gera PDF com TODO o conteudo do relatorio (fonte Courier, ASCII + Latin-1)."""
+    if not HAS_FPDF:
+        return None
+    try:
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+
+        # Converte texto para seguro: Latin-1 (cp1252) mantem acentos,
+        # tudo que nao couber vira '?'
+        def _safe(t):
+            try:
+                return t.encode("cp1252", errors="replace").decode("cp1252")
+            except Exception:
+                return t.encode("ascii", errors="replace").decode("ascii")
+
+        pdf.set_font("Courier", "", 7)
+
+        # Cabeçalho do PDF
+        pdf.set_font("Courier", "", 14)
+        pdf.cell(0, 8, "DIAGNOSTICO PS REMOTE PLAY", align="C")
+        pdf.ln(7)
+        pdf.set_font("Courier", "", 7)
+        pdf.cell(0, 5, f"Gerado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", align="C")
+        pdf.ln(6)
+        if has_issues:
+            pdf.set_text_color(180, 0, 0)
+        else:
+            pdf.set_text_color(0, 140, 0)
+        pdf.cell(0, 5, ">> PROBLEMAS DETECTADOS <<" if has_issues else ">> NENHUM BLOQUEIO CRITICO <<", align="C")
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(8)
+
+        # Achata REPORT em linhas
+        flat = []
+        for entry in REPORT:
+            flat.extend(entry.split("\n"))
+
+        pdf.set_font("Courier", "", 7)
+        sep_count = 0
+        for raw in flat:
+            s = raw.strip()
+
+            # Separador ====
+            if s.startswith("=" * 10):
+                sep_count += 1
+                if sep_count % 2 == 1:
+                    continue
+                pdf.cell(0, 3, " " + "-" * 74)
+                pdf.ln(3)
+                continue
+
+            # Vazia
+            if not s:
+                pdf.ln(2)
+                continue
+
+            # Titulo (linha depois de separador impar)
+            if sep_count % 2 == 1:
+                pdf.ln(2)
+                pdf.set_font("Courier", "", 9)
+                pdf.multi_cell(0, 4, _safe(s))
+                pdf.set_font("Courier", "", 7)
+                continue
+
+            # Nota
+            if s.startswith("--- Como interpretar"):
+                pdf.ln(1)
+                pdf.set_font("Courier", "", 7)
+                pdf.write(4, "[NOTA] ")
+                pdf.set_font("Courier", "", 7)
+                continue
+
+            # Linha normal
+            cleaned = _safe(raw)
+            if not cleaned.strip():
+                continue
+            try:
+                pdf.multi_cell(0, 3.5, cleaned)
+            except Exception:
+                pass
+
+        out = "remoteplay_diagnostico.pdf"
+        pdf.output(out)
+        return out
+    except Exception as e:
+        print(f" {C.Y}  PDF nao gerado: {e}{C.N}")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Salvar relatórios e exibir veredito no terminal
+# ---------------------------------------------------------------------------
+
+OUTPUT_FILE_TXT = "remoteplay_diagnostico.txt"
 OUTPUT_ENCODING = "utf-8-sig" if IS_WINDOWS else "utf-8"
-with open(OUTPUT_FILE, "w", encoding=OUTPUT_ENCODING) as f:
+with open(OUTPUT_FILE_TXT, "w", encoding=OUTPUT_ENCODING) as f:
     f.write("\n".join(REPORT))
 
-print("\nRelatório salvo em:")
-print(os.path.abspath(OUTPUT_FILE))
-if IS_WINDOWS:
-    print(
-        "\nDica: para ver o relatório no terminal sem acentos quebrados, abra-o\n"
-        "com 'notepad remoteplay_diagnostico.txt' ou no VS Code. Se usar 'cat'/\n"
-        "'type' no PowerShell e ainda aparecer 'Ã§Ã£o' no lugar de 'ção', rode:\n"
-        "  Get-Content .\\remoteplay_diagnostico.txt -Encoding utf8"
-    )
+# Exibe veredito no terminal
+has_issues = bool(vpn_active_adapters) or https_ssl_error or not https_play.startswith("200") or not tcp443_ok
+_terminal_verdict(has_issues, rp_ok, remote_scenario)
+
+# Gera HTML
+html_content = _generate_html()
+html_file = "remoteplay_diagnostico.html"
+with open(html_file, "w", encoding="utf-8") as f:
+    f.write(html_content)
+
+# Gera PDF (se fpdf2 estiver instalado)
+pdf_path = _generate_pdf()
+
+# Sumário final
+print(f" {C.B}{C.C}📁  RELATÓRIOS GERADOS:{C.N}")
+print(f" {C.C}{'─'*50}{C.N}")
+print(f"   📄 {C.B}remoteplay_diagnostico.txt{C.N}  (texto, UTF-8)")
+print(f"   🌐 {C.B}remoteplay_diagnostico.html{C.N}  (HTML, abra no navegador)")
+if pdf_path:
+    print(f"   📕 {C.B}{pdf_path}{C.N}")
+elif HAS_FPDF:
+    print(f"   📕 {C.Y}PDF: falha (fonte Unicode não encontrada){C.N}")
+else:
+    print(f"   📕 {C.Y}PDF: opcional — instale com: pip install fpdf2{C.N}")
+print()
+print(f" {C.G}✅  Diagnóstico concluído!{C.N}")
+input(f"\n{C.C}Pressione Enter para sair...{C.N}")

@@ -1,0 +1,11 @@
+# PS Remote Play - Diagnóstico de Rede
+# ======================================
+# O script principal (script.py) funciona com a biblioteca PADRÃO do Python,
+# sem nenhuma dependência externa — zero "pip install" obrigatório.
+#
+# Dependências OPCIONAIS (instale apenas se quiser o recurso extra):
+#   fpdf2   → gera relatório em PDF com formatação e acentos
+#             (sem ela, o script gera apenas .txt e .html)
+
+# OPCIONAL — Geração de PDF
+fpdf2

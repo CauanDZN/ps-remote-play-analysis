@@ -15,6 +15,8 @@ env/
 
 # Relatório gerado pelo script (contém dados de rede do PC onde foi executado)
 remoteplay_diagnostico.txt
+*.html
+*.pdf
 
 # Arquivos de SO/editor
 .DS_Store

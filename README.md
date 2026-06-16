@@ -8,10 +8,49 @@ Ele coleta informações de sistema, rede, DNS, proxy, firewall, VPN/adaptadores
 de túnel e conectividade, e gera um relatório único em texto explicando o que
 cada resultado significa e o que fazer em caso de erro.
 
+## 🔍 Teste Rápido (30 segundos)
+
+Antes de rodar o script completo, veja se o problema é algo bobo:
+
+### 1️⃣ Adaptadores de rede suspeitos
+```powershell
+# Windows (PowerShell como Admin): lista adaptadores ATIVOS
+Get-NetAdapter | Where-Object Status -eq 'Up' | Format-Table Name,InterfaceDescription
+```
+Se aparecer **ZeroTier, Radmin VPN, Tailscale, Hamachi ou WireGuard**, desabilite:
+```powershell
+Disable-NetAdapter -Name "NomeDoAdaptador" -Confirm:$false
+# Depois teste o Remote Play de novo. Se resolver, é isso!
+```
+
+### 2️⃣ Teste rápido de DNS
+```powershell
+# Windows (cmd ou PowerShell)
+nslookup remoteplay.dl.playstation.net
+```
+Se der `*** NXDOMAIN` ou IP estranho (ex: 0.0.0.0), o DNS está bloqueando.
+
+### 3️⃣ Teste rápido de conectividade
+```powershell
+# Windows (PowerShell)
+Test-NetConnection remoteplay.dl.playstation.net -Port 443
+```
+`TcpTestSucceeded: True` = OK. `False` = firewall/roteador bloqueando.
+
+### 4️⃣ Diagnóstico completo
+Se algum teste acima falhar, ou se quiser um relatório detalhado, rode o script:
+
+```powershell
+python script.py
+```
+
+---
+
 ## Requisitos
 
 - Python 3.8+ (usa apenas a biblioteca padrão - sem `pip install`)
 - Windows 10/11 ou Linux
+- (Opcional) Para gerar PDF: `pip install fpdf2`
 
 ## Como executar
 
@@ -136,19 +175,26 @@ dispositivos conectados (DHCP) no roteador.
 
 ## Saída
 
-Gera o arquivo `remoteplay_diagnostico.txt` (UTF-8, com BOM no Windows) na
-mesma pasta do script.
+O script gera **três formatos** na mesma pasta:
 
-> **Atenção:** esse arquivo contém dados de rede do seu PC (IP público,
+| Formato | Arquivo | Como abrir |
+|---------|---------|------------|
+| 📄 Texto | `remoteplay_diagnostico.txt` | Bloco de Notas, VS Code, `cat` |
+| 🌐 HTML | `remoteplay_diagnostico.html` | Qualquer navegador (recomendado) |
+| 📕 PDF | `remoteplay_diagnostico.pdf` | (requer `pip install fpdf2`) |
+
+O HTML é o formato mais bonito e tem suporte total a emojis e formatação.
+
+> **Atenção:** esses arquivos contêm dados de rede do seu PC (IP público,
 > endereços locais, nome do host, rotas, etc.). Revise antes de compartilhar
-> com terceiros (ex: suporte/TI). Por isso ele está no `.gitignore` e não é
-> versionado.
+> com terceiros (ex: suporte/TI). Por isso eles estão no `.gitignore` e não são
+> versionados.
 
 ### Acentos estranhos ao abrir o relatório
 
 Se aparecer algo como `ConfiguraÃ§Ã£o` em vez de `Configuração`, é só um
 problema de **exibição**, não do arquivo (que já está em UTF-8 correto).
-Abra com o Notepad, VS Code, ou no PowerShell rode:
+Abra o `.html` no navegador (recomendado) ou veja o `.txt` com:
 
 ```powershell
 Get-Content .\remoteplay_diagnostico.txt -Encoding utf8
