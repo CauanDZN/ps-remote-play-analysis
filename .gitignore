@@ -18,6 +18,9 @@ remoteplay_diagnostico.txt
 *.html
 *.pdf
 
+# Estado salvo pelo fix_vpn_adapters.py (nomes de adaptadores/serviços da máquina)
+vpn_fix_state.json
+
 # Arquivos de SO/editor
 .DS_Store
 Thumbs.db

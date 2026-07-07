@@ -139,6 +139,24 @@ vez) e tentar o Remote Play novamente.
 **Status:** confirmado no PC de casa - desabilitar Radmin VPN/ZeroTier
 resolveu a conexão local.
 
+**Correção automática:** em vez de desabilitar na mão (e descobrir depois que
+o ZeroTier reativa o adaptador sozinho porque o serviço dele continua rodando
+em segundo plano), use o `fix_vpn_adapters.py`:
+
+```powershell
+python fix_vpn_adapters.py            # detecta, mostra e pede confirmação
+python fix_vpn_adapters.py --list     # só lista, não mexe em nada
+python fix_vpn_adapters.py --dry-run  # mostra o que faria, sem aplicar
+python fix_vpn_adapters.py --yes      # aplica sem perguntar
+python fix_vpn_adapters.py --restore  # desfaz (religa adaptador e serviço)
+```
+
+Ele detecta adaptadores de rede E os serviços do Windows por trás deles
+(ZeroTier, Radmin VPN, Tailscale, Hamachi, WireGuard, TAP/TUN genéricos),
+desliga os dois juntos, e salva o estado anterior em `vpn_fix_state.json`
+para reverter com `--restore` a qualquer momento. Pede elevação (UAC)
+automaticamente se necessário.
+
 ### 2. Downgrade + patch de versão (PS5 EM OUTRA REDE / pela internet) - CANDIDATO
 
 Quando o PS5 fica em outra rede (ex: PS5 em casa, PC no trabalho), a
